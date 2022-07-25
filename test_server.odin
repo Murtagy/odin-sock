@@ -12,18 +12,30 @@ main :: proc() {
 	serv_addr: SockAddr_in
 
 	listenfd := socket(AddrFamily.INET, Type.STREAM, 0)
+	fmt.println(" socket: ", listenfd)
 
 	serv_addr.family = cast(c.uchar) AddrFamily.INET
 	serv_addr.addr.addr = cast(c.uint) htonl(0)
 	serv_addr.port = htons(8080)
 
-	bind(listenfd, &serv_addr, size_of(serv_addr))
-	fmt.println(serv_addr)
+	fmt.println(
+		" bind",
+		bind(listenfd, &serv_addr, size_of(serv_addr))
+	)
+	
 
-	listen(listenfd, 10)
+	fmt.println(
+		" listen",
+		listen(listenfd, 10)
+	)
 
 	for {
+		fmt.println("waiting...")
 		connfd := accept(listenfd, nil, 0)
+		fmt.println(
+			" conndf",
+			connfd
+		)
 
 		os.write_string(cast(os.Handle)connfd, "Hello, sailor!\n")
 
