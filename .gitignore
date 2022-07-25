@@ -4,4 +4,4 @@ test.exe
 *.ll
 *.obj
 *.swp
-
+*.bin
