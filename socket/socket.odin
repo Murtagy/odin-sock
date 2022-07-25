@@ -1,4 +1,4 @@
-package sock
+package socket
 
 foreign import libc "system:c"
 import "core:c"

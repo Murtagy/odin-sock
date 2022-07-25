@@ -1,12 +1,14 @@
 package main
 
-import "sock"
+import "socket"
 import "core:c"
 import "core:fmt"
 import "core:os"
 
+
 main :: proc() {
-	using sock
+	using socket
+
 	serv_addr: SockAddr_in
 
 	listenfd := socket(AddrFamily.INET, Type.STREAM, 0)
