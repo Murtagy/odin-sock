@@ -48,11 +48,11 @@ Addr :: struct {
 }
 
 InAddr :: struct {
-	addr: c.ulong,
+	addr: c.uint,  // __uint32_t
 }
 
-Addrin :: struct {
-	family: c.short,
+SockAddr_in :: struct {
+	family: c.uchar,
 	port:   c.ushort,
 	addr:   InAddr,
 	zero:   [8]byte,
@@ -176,7 +176,7 @@ foreign libc {
 	socket        :: proc(domain: AddrFamily, typ: Type, protocol: c.int) -> os.Handle ---;
 	accept        :: proc(sockfd: os.Handle, addr: ^Addr, addrlen: c.uint) -> os.Handle ---;
 	accept4       :: proc(sockfd: os.Handle, addr: ^Addr, addrlen: c.uint, flags: c.int) -> os.Handle ---;
-	bind          :: proc(sockfd: os.Handle, addr: ^Addrin, addrlen: c.uint) -> c.int ---;
+	bind          :: proc(sockfd: os.Handle, addr: ^SockAddr_in, addrlen: c.uint) -> c.int ---;
 	connect       :: proc(sockfd: os.Handle, addr: ^Addr, addrlen: c.uint) -> c.int ---;
 	getsockname   :: proc(sockfd: os.Handle, addr: ^Addr, addrlen: c.uint) -> c.int ---;
 	listen        :: proc(sockfd: os.Handle, backlog: c.int) -> c.int ---;
