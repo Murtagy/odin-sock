@@ -42,8 +42,8 @@ Type :: enum c.int {
 	                 * user level. Obsolete.       */
 }
 
-Addr :: struct {
-	family: c.ushort, // address family, xxx
+SocketAddr :: struct {
+	family: c.uchar, // address family, xxx
 	data:   [14]byte, // 14 bytes of protocol address
 }
 
@@ -51,7 +51,7 @@ InAddr :: struct {
 	addr: c.uint,  // __uint32_t
 }
 
-SockAddr_in :: struct {
+SocketAddr_in :: struct {  // `in` stand for internet?
 	family: c.uchar,
 	port:   c.ushort,
 	addr:   InAddr,
@@ -79,7 +79,7 @@ Addrinfo :: struct {
 	socktype:  Type,
 	protocol:  c.int,
 	addrlen:   c.uint,
-	addr:      ^Addr,
+	addr:      ^SocketAddr,
 	canonname: cstring,
 	next:      ^Addrinfo,
 }
@@ -119,12 +119,12 @@ EAI_INTR        :: -104; // Interrupted by a signal.
 EAI_IDN_ENCODE  :: -105; // IDN encoding failed.
 
 Ifaddrs :: struct {
-	next:     ^Ifaddrs, // Next item in list
-	name:     cstring,  // Name of interface
-	flags:    c.uint,   // Flags from SIOCGIFFLAGS
-	addr:     ^Addr,    // Address of interface
-	netmask:  ^Addr,    // Netmask of interface
-	ifu_addr: ^Addr,    /* Broadcast address of interface if IFF_BROADCAST is set or
+	next:     ^Ifaddrs,         // Next item in list
+	name:     cstring,          // Name of interface
+	flags:    c.uint,           // Flags from SIOCGIFFLAGS
+	addr:     ^SocketAddr,      // Address of interface
+	netmask:  ^SocketAddr,      // Netmask of interface
+	ifu_addr: ^SocketAddr,      /* Broadcast address of interface if IFF_BROADCAST is set or
 	                     * point-to-point destination address if IFF_POINTTOPOINT is set
 	                     * in flags */
 	data:     rawptr,
@@ -174,17 +174,17 @@ foreign libc {
 	h_errno: c.int;
 
 	socket        :: proc(domain: AddrFamily, typ: Type, protocol: c.int) -> os.Handle ---;
-	accept        :: proc(sockfd: os.Handle, addr: ^Addr, addrlen: c.uint) -> os.Handle ---;
-	accept4       :: proc(sockfd: os.Handle, addr: ^Addr, addrlen: c.uint, flags: c.int) -> os.Handle ---;
-	bind          :: proc(sockfd: os.Handle, addr: ^SockAddr_in, addrlen: c.uint) -> c.int ---;
-	connect       :: proc(sockfd: os.Handle, addr: ^Addr, addrlen: c.uint) -> c.int ---;
-	getsockname   :: proc(sockfd: os.Handle, addr: ^Addr, addrlen: c.uint) -> c.int ---;
+	accept        :: proc(sockfd: os.Handle, addr: ^SocketAddr, addrlen: c.uint) -> os.Handle ---;
+	accept4       :: proc(sockfd: os.Handle, addr: ^SocketAddr, addrlen: c.uint, flags: c.int) -> os.Handle ---;
+	bind          :: proc(sockfd: os.Handle, addr: ^SocketAddr_in, addrlen: c.uint) -> c.int ---;
+	connect       :: proc(sockfd: os.Handle, addr: ^SocketAddr_in, addrlen: c.uint) -> c.int ---;
+	getsockname   :: proc(sockfd: os.Handle, addr: ^SocketAddr, addrlen: c.uint) -> c.int ---;
 	listen        :: proc(sockfd: os.Handle, backlog: c.int) -> c.int ---;
 	getifaddrs    :: proc(ifap: ^Ifaddrs) -> c.int ---;
 	freeifaddrs   :: proc(ifa: Ifaddrs) ---;
 	getaddrinfo   :: proc(node, service: cstring, hints: ^Addrinfo, res: ^^Addrinfo) -> AddrinfoError ---;
 	freeaddrinfo  :: proc(res: ^Addrinfo) ---;
-	getnameinfo   :: proc(addr: ^Addr, addrlen: c.uint, host: cstring, hostlen: c.uint, serv: cstring, servlen: c.uint, flags: c.int) -> c.int ---;
+	getnameinfo   :: proc(addr: ^SocketAddr, addrlen: c.uint, host: cstring, hostlen: c.uint, serv: cstring, servlen: c.uint, flags: c.int) -> c.int ---;
 	gai_strerror  :: proc(res: ^Addrinfo) -> cstring ---;
 	gethostbyname :: proc(name: cstring) -> ^Hostent ---;
 	gethostbyaddr :: proc(addr: rawptr, len: c.uint, typ: c.int) -> ^Hostent ---;
