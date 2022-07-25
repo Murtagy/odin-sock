@@ -13,7 +13,7 @@ import "core:os"
  */
 
 // Communication Domain/Address Family
-AddrFamily :: enum c.int {
+AddrFamily :: enum c.uchar {
 	UNSPEC    = 0,
 	UNIX      = 1, // Local communication
 	INET      = 2, // IPv4 Internet protocols
@@ -29,7 +29,7 @@ AddrFamily :: enum c.int {
 	MAX       = 12,
 }
 
-Type :: enum c.int {
+Type :: enum c.uchar {
 	STREAM    = 1,  // stream (connection) socket
 	DGRAM     = 2,  // datagram (conn.less) socket
 	RAW       = 3,  // raw socket
@@ -47,11 +47,11 @@ SocketAddr :: struct {
 	data:   [14]byte, // 14 bytes of protocol address
 }
 
-InAddr :: struct {
+InAddr :: struct {  // Internet address (a structure for historical reasons)
 	addr: c.uint,  // __uint32_t
 }
 
-SocketAddr_in :: struct {  // `in` stand for internet?
+SocketAddr_in :: struct {  // Socket address, internet style.
 	family: c.uchar,
 	port:   c.ushort,
 	addr:   InAddr,

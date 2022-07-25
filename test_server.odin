@@ -14,8 +14,8 @@ main :: proc() {
 	listenfd := socket(AddrFamily.INET, Type.STREAM, 6)
 	fmt.println(" socket: ", listenfd)
 
-	serv_addr.family = cast(c.uchar) AddrFamily.INET
-	serv_addr.addr.addr = cast(c.uint) htonl(0)
+	serv_addr.family = c.uint8_t(AddrFamily.INET)
+	serv_addr.addr.addr =  htonl(0)
 	serv_addr.port = htons(8080)
 
 	fmt.println(
