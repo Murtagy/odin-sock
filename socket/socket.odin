@@ -13,7 +13,7 @@ import "core:os"
  */
 
 // Communication Domain/Address Family
-AddrFamily :: enum c.int {
+AddrFamily :: enum c.uint8_t {
     // I am currently getting '30' which is odd, found this: https://stackoverflow.com/questions/18407191/what-address-families-can-getaddrinfo-return
 
 	UNSPEC    = 0,
@@ -56,7 +56,7 @@ InAddr :: struct {  // Internet address (a structure for historical reasons)
 }
 
 sockaddr_in :: struct {  // Socket address, internet style.
-	family: c.uint8_t,
+	family: AddrFamily,
 	port:   c.uint16_t,
 	addr:   InAddr,
 	zero:   [8]byte,

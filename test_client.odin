@@ -14,9 +14,9 @@ main :: proc() {
 	connfd := socket(AddrFamily.INET, SocketType.STREAM, 6)
 	fmt.println(" socket: ", connfd)
 
-	server_addr.family = cast(c.uchar) AddrFamily.INET
-	server_addr.addr.addr = cast(c.uint) htonl(0)
-	server_addr.port = htons(8080)
+	server_addr.family 		= AddrFamily.INET
+	server_addr.addr.addr  	= htonl(0)
+	server_addr.port 		= htons(8080)
 
 	fmt.println(
 		" connect",

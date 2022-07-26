@@ -14,7 +14,7 @@ main :: proc() {
 	listenfd := socket(AddrFamily.INET, SocketType.STREAM, 6)
 	fmt.println(" socket: ", listenfd)
 
-	serv_addr.family = c.uint8_t(AddrFamily.INET)
+	serv_addr.family = AddrFamily.INET
 	serv_addr.addr.addr =  htonl(0)
 	serv_addr.port = htons(8080)
 
@@ -40,5 +40,6 @@ main :: proc() {
 		os.write_string(cast(os.Handle)connfd, "Hello, sailor!\n")
 
 		os.close(cast(os.Handle) connfd)
+		break
 	}
 }
