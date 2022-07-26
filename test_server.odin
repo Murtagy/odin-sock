@@ -9,9 +9,9 @@ import "core:os"
 main :: proc() {
 	using socket
 
-	serv_addr: SocketAddr_in
+	serv_addr: sockaddr_in
 
-	listenfd := socket(AddrFamily.INET, Type.STREAM, 6)
+	listenfd := socket(AddrFamily.INET, SocketType.STREAM, 6)
 	fmt.println(" socket: ", listenfd)
 
 	serv_addr.family = c.uint8_t(AddrFamily.INET)

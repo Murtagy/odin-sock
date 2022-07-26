@@ -8,16 +8,19 @@ import "core:os"
 main :: proc() {
     using socket
 
-    node: cstring = "www.example.net"
+    node: cstring = "www.google.com"
     service: cstring = "80"
-    hints : Addrinfo
-    server_info: ^Addrinfo
+    hints : addrinfo
+    server_info: ^addrinfo
 
+    // hints.flags = addrinfoFlags.AI_PASSIVE
     hints.family = AddrFamily.UNSPEC
-    hints.socktype = Type.STREAM
+    hints.socktype = SocketType.STREAM
 
     fmt.println(
+        "getaddrinfo",
         getaddrinfo(node, service, &hints, &server_info)
     )
+    fmt.println(server_info)
 
 }

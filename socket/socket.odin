@@ -13,7 +13,9 @@ import "core:os"
  */
 
 // Communication Domain/Address Family
-AddrFamily :: enum c.uchar {
+AddrFamily :: enum c.int {
+    // I am currently getting '30' which is odd, found this: https://stackoverflow.com/questions/18407191/what-address-families-can-getaddrinfo-return
+
 	UNSPEC    = 0,
 	UNIX      = 1, // Local communication
 	INET      = 2, // IPv4 Internet protocols
@@ -27,9 +29,11 @@ AddrFamily :: enum c.uchar {
 	INET6     = 10,// IPv6 Internet protocols
 	RESERVED,
 	MAX       = 12,
+
+    PROBABLY_LOCAL_MAC = 30,
 }
 
-Type :: enum c.uchar {
+SocketType :: enum c.int {
 	STREAM    = 1,  // stream (connection) socket
 	DGRAM     = 2,  // datagram (conn.less) socket
 	RAW       = 3,  // raw socket
@@ -42,8 +46,8 @@ Type :: enum c.uchar {
 	                 * user level. Obsolete.       */
 }
 
-SocketAddr :: struct {
-	family: c.uchar, // address family, xxx
+sockaddr :: struct {
+	family: c.uint8_t, // address family, xxx
 	data:   [14]byte, // 14 bytes of protocol address
 }
 
@@ -51,9 +55,9 @@ InAddr :: struct {  // Internet address (a structure for historical reasons)
 	addr: c.uint,  // __uint32_t
 }
 
-SocketAddr_in :: struct {  // Socket address, internet style.
-	family: c.uchar,
-	port:   c.ushort,
+sockaddr_in :: struct {  // Socket address, internet style.
+	family: c.uint8_t,
+	port:   c.uint16_t,
 	addr:   InAddr,
 	zero:   [8]byte,
 }
@@ -73,29 +77,39 @@ Msghdr :: struct {
 	flags:      c.int,   // 4.4 BSD field we dont use
 }
 
-Addrinfo :: struct {
-	flags:     AddrinfoFlags,
-	family:    AddrFamily,
-	socktype:  Type,
-	protocol:  c.int,
-	addrlen:   c.uint,
-	addr:      ^SocketAddr,
-	canonname: cstring,
-	next:      ^Addrinfo,
+
+
+addrinfoFlags :: enum c.int {
+    NOT_SET        = 0,
+
+    // my mac seems to set these differently:
+
+	AI_PASSIVE     = 0x00000001, // Socket address is intended for bind.
+	AI_CANONNAME   = 0x00000002, // Request for canonical name.
+	AI_NUMERICHOST = 0x00000004, // Don't use name resolution.
+	// AI_V4MAPPED    = 0x0008, // IPv4 mapped addresses are acceptable.
+	// AI_ALL         = 0x0010, // Return IPv4 mapped and IPv6 addresses.
+	// AI_ADDRCONFIG  = 0x0020, // Use configuration of this host to choose returned address type.
+	AI_NUMERICSERV = 0x00001000, // Don't use name resolution.
 }
 
-AddrinfoFlags :: enum c.int {
-	AI_PASSIVE     = 0x0001, // Socket address is intended for bind.
-	AI_CANONNAME   = 0x0002, // Request for canonical name.
-	AI_NUMERICHOST = 0x0004, // Don't use name resolution.
-	AI_V4MAPPED    = 0x0008, // IPv4 mapped addresses are acceptable.
-	AI_ALL         = 0x0010, // Return IPv4 mapped and IPv6 addresses.
-	AI_ADDRCONFIG  = 0x0020, // Use configuration of this host to choose returned address type.
-	AI_NUMERICSERV = 0x0400, // Don't use name resolution.
+addrinfo :: struct {
+	flags:     addrinfoFlags,
+	family:    AddrFamily,
+	socktype:  SocketType,
+	protocol:  c.int,
+	addrlen:   c.uint32_t,  // size_t per system
+	canonname: cstring,
+	addr:      ^sockaddr,
+	next:      ^addrinfo,
 }
 
 // Error values for getaddrinfo
-AddrinfoError :: enum c.int {
+addrinfoError :: enum c.int {
+	SUCCESS        =  0,  // Yay
+
+    // my mac seems to set these differently in netdb.h:
+
 	EAI_BADFLAGS   = -1,  // Invalid value for flags field.
 	EAI_NONAME     = -2,  // NAME or SERVICE is unknown.
 	EAI_AGAIN      = -3,  // Temporary failure in name resolution.
@@ -122,9 +136,9 @@ Ifaddrs :: struct {
 	next:     ^Ifaddrs,         // Next item in list
 	name:     cstring,          // Name of interface
 	flags:    c.uint,           // Flags from SIOCGIFFLAGS
-	addr:     ^SocketAddr,      // Address of interface
-	netmask:  ^SocketAddr,      // Netmask of interface
-	ifu_addr: ^SocketAddr,      /* Broadcast address of interface if IFF_BROADCAST is set or
+	addr:     ^sockaddr,      // Address of interface
+	netmask:  ^sockaddr,      // Netmask of interface
+	ifu_addr: ^sockaddr,      /* Broadcast address of interface if IFF_BROADCAST is set or
 	                     * point-to-point destination address if IFF_POINTTOPOINT is set
 	                     * in flags */
 	data:     rawptr,
@@ -173,19 +187,19 @@ SOMAXCONN :: 128;
 foreign libc {
 	h_errno: c.int;
 
-	socket        :: proc(domain: AddrFamily, typ: Type, protocol: c.int) -> os.Handle ---;
-	accept        :: proc(sockfd: os.Handle, addr: ^SocketAddr, addrlen: c.uint) -> os.Handle ---;
-	accept4       :: proc(sockfd: os.Handle, addr: ^SocketAddr, addrlen: c.uint, flags: c.int) -> os.Handle ---;
-	bind          :: proc(sockfd: os.Handle, addr: ^SocketAddr_in, addrlen: c.uint) -> c.int ---;
-	connect       :: proc(sockfd: os.Handle, addr: ^SocketAddr_in, addrlen: c.uint) -> c.int ---;
-	getsockname   :: proc(sockfd: os.Handle, addr: ^SocketAddr, addrlen: c.uint) -> c.int ---;
+	socket        :: proc(domain: AddrFamily, typ: SocketType, protocol: c.int) -> os.Handle ---;
+	accept        :: proc(sockfd: os.Handle, addr: ^sockaddr, addrlen: c.uint) -> os.Handle ---;
+	accept4       :: proc(sockfd: os.Handle, addr: ^sockaddr, addrlen: c.uint, flags: c.int) -> os.Handle ---;
+	bind          :: proc(sockfd: os.Handle, addr: ^sockaddr_in, addrlen: c.uint) -> c.int ---;
+	connect       :: proc(sockfd: os.Handle, addr: ^sockaddr_in, addrlen: c.uint) -> c.int ---;
+	getsockname   :: proc(sockfd: os.Handle, addr: ^sockaddr, addrlen: c.uint) -> c.int ---;
 	listen        :: proc(sockfd: os.Handle, backlog: c.int) -> c.int ---;
 	getifaddrs    :: proc(ifap: ^Ifaddrs) -> c.int ---;
 	freeifaddrs   :: proc(ifa: Ifaddrs) ---;
-	getaddrinfo   :: proc(node, service: cstring, hints: ^Addrinfo, res: ^^Addrinfo) -> AddrinfoError ---;
-	freeaddrinfo  :: proc(res: ^Addrinfo) ---;
-	getnameinfo   :: proc(addr: ^SocketAddr, addrlen: c.uint, host: cstring, hostlen: c.uint, serv: cstring, servlen: c.uint, flags: c.int) -> c.int ---;
-	gai_strerror  :: proc(res: ^Addrinfo) -> cstring ---;
+	getaddrinfo   :: proc(node, service: cstring, hints: ^addrinfo, res: ^^addrinfo) -> addrinfoError ---;
+	freeaddrinfo  :: proc(res: ^addrinfo) ---;
+	getnameinfo   :: proc(addr: ^sockaddr, addrlen: c.uint, host: cstring, hostlen: c.uint, serv: cstring, servlen: c.uint, flags: c.int) -> c.int ---;
+	gai_strerror  :: proc(res: ^addrinfo) -> cstring ---;
 	gethostbyname :: proc(name: cstring) -> ^Hostent ---;
 	gethostbyaddr :: proc(addr: rawptr, len: c.uint, typ: c.int) -> ^Hostent ---;
 	sethostent    :: proc(stayopen: c.int) ---;
