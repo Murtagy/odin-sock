@@ -5,7 +5,8 @@
 
 Low-level bindings to Berkeley (BSD) sockets that should likely be in the standard library.
 
-Tested to work on Linux, but might work on other Unix-like systems as well.
+Forked base was tested to work on Linux, but might work on other Unix-like systems as well.
+I (Murtagy) am trying to make this work on my Mac.
 
 ## License
 Licensed to the public domain under the UNLICENSE, see [LICENSE](LICENSE) file.
