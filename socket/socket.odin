@@ -187,31 +187,31 @@ SOMAXCONN :: 128;
 foreign libc {
 	h_errno: c.int;
 
-	socket        :: proc(domain: AddrFamily, typ: SocketType, protocol: c.int) -> os.Handle ---;
 	accept        :: proc(sockfd: os.Handle, addr: ^sockaddr, addrlen: c.uint) -> os.Handle ---;
 	accept4       :: proc(sockfd: os.Handle, addr: ^sockaddr, addrlen: c.uint, flags: c.int) -> os.Handle ---;
 	bind          :: proc(sockfd: os.Handle, addr: ^sockaddr_in, addrlen: c.uint) -> c.int ---;
 	connect       :: proc(sockfd: os.Handle, addr: ^sockaddr_in, addrlen: c.uint) -> c.int ---;
-	getsockname   :: proc(sockfd: os.Handle, addr: ^sockaddr, addrlen: c.uint) -> c.int ---;
-	listen        :: proc(sockfd: os.Handle, backlog: c.int) -> c.int ---;
-	getifaddrs    :: proc(ifap: ^Ifaddrs) -> c.int ---;
+	endhostent    :: proc() ---;
 	freeifaddrs   :: proc(ifa: Ifaddrs) ---;
-	getaddrinfo   :: proc(node, service: cstring, hints: ^addrinfo, res: ^^addrinfo) -> addrinfoError ---;
 	freeaddrinfo  :: proc(res: ^addrinfo) ---;
-	getnameinfo   :: proc(addr: ^sockaddr, addrlen: c.uint, host: cstring, hostlen: c.uint, serv: cstring, servlen: c.uint, flags: c.int) -> c.int ---;
 	gai_strerror  :: proc(res: ^addrinfo) -> cstring ---;
+	getaddrinfo   :: proc(node, service: cstring, hints: ^addrinfo, res: ^^addrinfo) -> addrinfoError ---;
 	gethostbyname :: proc(name: cstring) -> ^Hostent ---;
 	gethostbyaddr :: proc(addr: rawptr, len: c.uint, typ: c.int) -> ^Hostent ---;
-	sethostent    :: proc(stayopen: c.int) ---;
-	endhostent    :: proc() ---;
+	getnameinfo   :: proc(addr: ^sockaddr, addrlen: c.uint, host: cstring, hostlen: c.uint, serv: cstring, servlen: c.uint, flags: c.int) -> c.int ---;
+	gethostent    :: proc() -> ^Hostent ---;
+	getifaddrs    :: proc(ifap: ^Ifaddrs) -> c.int ---;
+	getsockname   :: proc(sockfd: os.Handle, addr: ^sockaddr, addrlen: c.uint) -> c.int ---;
 	herror        :: proc(s: cstring) ---;
 	hstrerror     :: proc(err: c.int) -> cstring ---;
-	gethostent    :: proc() -> ^Hostent ---;
-
 	htonl         :: proc(hostlong: u32) -> u32 ---;
 	htons         :: proc(hostshort: u16) -> u16 ---;
+	listen        :: proc(sockfd: os.Handle, backlog: c.int) -> c.int ---;
 	ntohl         :: proc(netlong: u32) -> u32 ---;
 	ntohs         :: proc(netshort: u16) -> u16 ---;
+	sethostent    :: proc(stayopen: c.int) ---;
+	socket        :: proc(domain: AddrFamily, typ: SocketType, protocol: c.int) -> os.Handle ---;
+
 }
 
 HostErrno :: enum c.int {
