@@ -12,25 +12,51 @@ YES_SIZE :: size_of(YES)
 pfds: [dynamic]socket.pollfd
 
 main :: proc() {
+    using fmt
 	using socket
 
-	// manual way
     listener := get_listener_socket()
+    if listener == -1 {
+        println("error getting listening socket")
+    }
+
+    client_address: sockaddr_storage
 
 
-	for {
-		fmt.println("waiting...")
-		connfd := accept(listener, nil, 0)
-		fmt.println(
-			" conndf",
-			connfd
-		)
+    append(&pfds, pollfd{fd=listener, events=POLLIN})
 
-		os.write_string(cast(os.Handle)connfd, "Hello, sailor!\n")
+    poll_count := poll(raw_data(pfds), c.int(len(pfds)), -1)
+    if poll_count == -1 {
+        println("poll error")
+    }
 
-		os.close(cast(os.Handle) connfd)
-		break
-	}
+    for descriptor in pfds {
+
+       
+        // println(descriptor.fd)   // this fails
+        println(descriptor.events)
+        println(descriptor.revents)
+        println(descriptor.revents & POLLIN )
+
+        // if descriptor.revents & POLLIN {
+        //     if descriptor.fd == listener {
+        //         // listener is ready to read, handle new conn
+        //         addrlen := size_of(client_address)
+        //         connection = accept(listener, (^sockaddr)(&client_address), &addrlen)
+        //         println("connection fd", connection)
+        //     }
+        // }
+    }
+
+    connfd := accept(listener, nil, 0)
+    println(
+        " conndf",
+        connfd
+    )
+
+    os.write_string(cast(os.Handle)connfd, "Hello, sailor!\n")
+
+    os.close(cast(os.Handle) connfd)
 }
 
 

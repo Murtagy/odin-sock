@@ -29,6 +29,14 @@ sockaddr_in :: struct {  // Socket address, internet style.
 	addr:   InAddr,      //8
 	zero:   [8]byte,     //8
 }
+
+sockaddr_storage :: struct {
+	// ss_len
+	ss_family: ADDRESS_FAMILY,
+	__ss_pad1: [6]c.char,
+	__ss_align: i64,
+	__ss_pad2: [112]c.char,
+}
 InAddr :: struct {  // Internet address (a structure for historical reasons)
 	addr: c.uint,  // __uint32_t
 }
@@ -159,7 +167,7 @@ Msghdr :: struct {
 SOMAXCONN :: 128;
 
 pollfd :: struct {
-        fd:      c.int,       // the socket descriptor
+        fd:      SOCKET_T,       // the socket descriptor
         events:  c.short,    // bitmap of events we're interested in
         revents: c.short,   // when poll() returns, bitmap of events that occurred
 }
@@ -167,6 +175,8 @@ pollfd :: struct {
 POLLIN :      :		0x0001 
 SOL_SOCKET:   :		0xffff 
 SO_REUSEADDR: :		0x0004
+
+SOCKET_T :: union { os.Handle, c.int }
 
 
 @(default_calling_convention="c")
@@ -195,7 +205,7 @@ foreign libc {
 	hstrerror     :: proc(err: c.int) -> cstring ---;
 	htonl         :: proc(hostlong: u32) -> u32 ---;
 	htons         :: proc(hostshort: u16) -> u16 ---;
-	poll		  :: proc(fds: ^pollfd, nfds: c.int, timeout: c.int) -> c.int ---
+	poll		  :: proc(fds: ^pollfd, number_of_file_descriptors: c.int, timeout: c.int) -> c.int ---
 	listen        :: proc(sockfd: os.Handle, backlog: c.int) -> c.int ---;
 	ntohl         :: proc(netlong: u32) -> u32 ---;
 	ntohs         :: proc(netshort: u16) -> u16 ---;
