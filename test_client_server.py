@@ -1,17 +1,25 @@
 import time
 import subprocess
 
+def print_exit(who: str, exit: int | None):
+    if exit != 0:
+        print(who, 'exited wrongly', exit)
+
+
 server_proc = subprocess.Popen(["odin", "run", "test_server.odin", "-file"])
+time.sleep(1)
 client_proc = subprocess.Popen(["odin", "run", "test_client.odin", "-file"])
 
-time.sleep(3)
+print_exit('server', server_proc.wait())
+print_exit('client', client_proc.wait())
 
-rc: int | None = server_proc.wait()
-if rc != 0:
-    print('server exited wrongly', rc)
-rc: int | None = client_proc.wait()
-if rc != 0:
-    print('client exited wrongly', rc)
+server_proc = subprocess.Popen(["odin", "run", "test_server2.odin", "-file"])
+time.sleep(1)
+client_proc = subprocess.Popen(["odin", "run", "test_client.odin", "-file"])
+
+print_exit('server', server_proc.wait())
+print_exit('client', client_proc.wait())
+
 
 
 print('good')

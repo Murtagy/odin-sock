@@ -6,13 +6,21 @@ import "core:fmt"
 import "core:os"
 
 
+YES : c.int = 1
+YES_SIZE :: size_of(YES)
+
+
 main :: proc() {
 	using socket
-
 
 	// manual way
 	listener := socket(c.int(AF_INET), SocketType.STREAM, 6)
 	fmt.println(" socket: ", listener)
+
+    fmt.println(
+        "setsockopt",
+        setsockopt(listener, SOL_SOCKET, SO_REUSEADDR, &YES, YES_SIZE)
+    )
 
 	serv_addr: sockaddr_in
 	serv_addr.family = AF_INET

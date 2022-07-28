@@ -12,20 +12,22 @@ import "core:os"
  *  External feedback is highly appreciated.
  */
 
+C_Errno :: c.int
 // Communication Domain/Address Family
-AF_UNSPEC : c.uchar : 0
-AF_INET : c.uchar : 2
+ADDRESS_FAMILY :: c.ushort
+AF_UNSPEC : c.ushort : 0
+AF_INET : c.ushort : 2
 
 sockaddr :: struct {
-	family: c.uint8_t, // address family, xxx
+	family: ADDRESS_FAMILY, // address family, xxx
 	data:   [14]byte, // 14 bytes of protocol address
 }
 
 sockaddr_in :: struct {  // Socket address, internet style.
-	family: c.uint8_t,
-	port:   c.uint16_t,
-	addr:   InAddr,
-	zero:   [8]byte,
+	family: ADDRESS_FAMILY,   //1
+	port:   c.ushort,  //
+	addr:   InAddr,      //8
+	zero:   [8]byte,     //8
 }
 InAddr :: struct {  // Internet address (a structure for historical reasons)
 	addr: c.uint,  // __uint32_t
@@ -156,15 +158,29 @@ Msghdr :: struct {
 
 SOMAXCONN :: 128;
 
+pollfd :: struct {
+        fd:      c.int,       // the socket descriptor
+        events:  c.short,    // bitmap of events we're interested in
+        revents: c.short,   // when poll() returns, bitmap of events that occurred
+}
+
+POLLIN :      :		0x0001 
+SOL_SOCKET:   :		0xffff 
+SO_REUSEADDR: :		0x0004
+
+
 @(default_calling_convention="c")
 foreign libc {
 	h_errno: c.int;
 
+	// rubbish       :: proc(i: c.int) ---; // was testing linker
+
 	accept        :: proc(sockfd: os.Handle, addr: ^sockaddr, addrlen: c.uint) -> os.Handle ---;
 	accept4       :: proc(sockfd: os.Handle, addr: ^sockaddr, addrlen: c.uint, flags: c.int) -> os.Handle ---;
-	bind          :: proc(sockfd: os.Handle, addr: ^sockaddr_in, addrlen: c.uint) -> c.int ---;
+	bind          :: proc(sockfd: os.Handle, addr: ^sockaddr, addrlen: c.uint) -> c.int ---;
 	connect       :: proc(sockfd: os.Handle, addr: ^sockaddr_in, addrlen: c.uint) -> c.int ---;
 	endhostent    :: proc() ---;
+	fcntl         :: proc(s: c.int, cmd: c.int, arg: c.long) -> c.int ---;
 	freeifaddrs   :: proc(ifa: Ifaddrs) ---;
 	freeaddrinfo  :: proc(res: ^addrinfo) ---;
 	gai_strerror  :: proc(res: ^addrinfo) -> cstring ---;
@@ -179,10 +195,12 @@ foreign libc {
 	hstrerror     :: proc(err: c.int) -> cstring ---;
 	htonl         :: proc(hostlong: u32) -> u32 ---;
 	htons         :: proc(hostshort: u16) -> u16 ---;
+	poll		  :: proc(fds: ^pollfd, nfds: c.int, timeout: c.int) -> c.int ---
 	listen        :: proc(sockfd: os.Handle, backlog: c.int) -> c.int ---;
 	ntohl         :: proc(netlong: u32) -> u32 ---;
 	ntohs         :: proc(netshort: u16) -> u16 ---;
 	sethostent    :: proc(stayopen: c.int) ---;
+	setsockopt    :: proc(socket: os.Handle, level: c.int, optname: c.int, optval: ^c.int, socklen: c.uint) -> c.int ---;
 	socket        :: proc(domain: c.int, typ: SocketType, protocol: c.int) -> os.Handle ---;
 
 }
