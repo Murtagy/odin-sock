@@ -9,11 +9,34 @@ import "core:os"
 YES : c.int = 1
 YES_SIZE :: size_of(YES)
 
+pfds: [dynamic]socket.pollfd
 
 main :: proc() {
 	using socket
 
 	// manual way
+    listener := get_listener_socket()
+
+
+	for {
+		fmt.println("waiting...")
+		connfd := accept(listener, nil, 0)
+		fmt.println(
+			" conndf",
+			connfd
+		)
+
+		os.write_string(cast(os.Handle)connfd, "Hello, sailor!\n")
+
+		os.close(cast(os.Handle) connfd)
+		break
+	}
+}
+
+
+get_listener_socket :: proc() -> os.Handle {
+    using socket
+
 	listener := socket(c.int(AF_INET), SocketType.STREAM, 6)
 	fmt.println(" socket: ", listener)
 
@@ -39,18 +62,5 @@ main :: proc() {
 		" listen",
 		listen(listener, 10)
 	)
-
-	for {
-		fmt.println("waiting...")
-		connfd := accept(listener, nil, 0)
-		fmt.println(
-			" conndf",
-			connfd
-		)
-
-		os.write_string(cast(os.Handle)connfd, "Hello, sailor!\n")
-
-		os.close(cast(os.Handle) connfd)
-		break
-	}
+    return listener
 }
