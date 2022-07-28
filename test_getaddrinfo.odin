@@ -14,7 +14,7 @@ main :: proc() {
     server_info: ^addrinfo
 
     // hints.flags = addrinfoFlags.AI_PASSIVE
-    hints.family = AddrFamily.UNSPEC
+    hints.family = c.int(AF_UNSPEC)
     hints.socktype = SocketType.STREAM
 
     fmt.println(

@@ -13,10 +13,28 @@ import "core:os"
  */
 
 // Communication Domain/Address Family
-AddrFamily :: c.int
 AF_UNSPEC : c.uchar : 0
 AF_INET : c.uchar : 2
-  
+
+sockaddr :: struct {
+	family: c.uint8_t, // address family, xxx
+	data:   [14]byte, // 14 bytes of protocol address
+}
+
+sockaddr_in :: struct {  // Socket address, internet style.
+	family: c.uint8_t,
+	port:   c.uint16_t,
+	addr:   InAddr,
+	zero:   [8]byte,
+}
+InAddr :: struct {  // Internet address (a structure for historical reasons)
+	addr: c.uint,  // __uint32_t
+}
+
+addrinfoFlags :: enum c.int {
+    NOT_SET        = 0,
+	AI_PASSIVE     = 0x00000001, // Socket address is intended for bind.
+}
 SocketType :: enum c.int {
 	STREAM    = 1,  // stream (connection) socket
 	DGRAM     = 2,  // datagram (conn.less) socket
@@ -30,33 +48,15 @@ SocketType :: enum c.int {
 	                 * user level. Obsolete.       */
 }
 
-sockaddr :: struct {
-	family: c.uint8_t, // address family, xxx
-	data:   [14]byte, // 14 bytes of protocol address
-}
-
-InAddr :: struct {  // Internet address (a structure for historical reasons)
-	addr: c.uint,  // __uint32_t
-}
-
-sockaddr_in :: struct {  // Socket address, internet style.
-	family: c.uint8_t,
-	port:   c.uint16_t,
-	addr:   InAddr,
-	zero:   [8]byte,
-}
-
-addrinfoFlags :: enum c.int {
-    NOT_SET        = 0,
-	AI_PASSIVE     = 0x00000001, // Socket address is intended for bind.
-}
-
 addrinfo :: struct {
+    // ints
 	flags:     addrinfoFlags,
-	family:    AddrFamily,
+	family:    c.int,
 	socktype:  SocketType,
 	protocol:  c.int,
-	addrlen:   c.uint32_t,  // size_t per system
+    // size_t per system
+	addrlen:   c.uint32_t,  
+    // others
 	canonname: cstring,
 	addr:      ^sockaddr,
 	next:      ^addrinfo,
@@ -183,7 +183,7 @@ foreign libc {
 	ntohl         :: proc(netlong: u32) -> u32 ---;
 	ntohs         :: proc(netshort: u16) -> u16 ---;
 	sethostent    :: proc(stayopen: c.int) ---;
-	socket        :: proc(domain: AddrFamily, typ: SocketType, protocol: c.int) -> os.Handle ---;
+	socket        :: proc(domain: c.int, typ: SocketType, protocol: c.int) -> os.Handle ---;
 
 }
 
