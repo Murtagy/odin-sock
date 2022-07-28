@@ -11,7 +11,7 @@ main :: proc() {
 
 	serv_addr: sockaddr_in
 
-	listenfd := socket(AF_INET, SocketType.STREAM, 6)
+	listenfd := socket(c.int(AF_INET), SocketType.STREAM, 6)
 	fmt.println(" socket: ", listenfd)
 
 	serv_addr.family = AF_INET

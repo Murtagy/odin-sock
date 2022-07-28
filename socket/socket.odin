@@ -13,9 +13,9 @@ import "core:os"
  */
 
 // Communication Domain/Address Family
-AddrFamily :: c.char
-AF_UNSPEC : AddrFamily : 0
-AF_INET : AddrFamily : 2
+AddrFamily :: c.int
+AF_UNSPEC : c.uchar : 0
+AF_INET : c.uchar : 2
   
 SocketType :: enum c.int {
 	STREAM    = 1,  // stream (connection) socket
@@ -40,41 +40,15 @@ InAddr :: struct {  // Internet address (a structure for historical reasons)
 }
 
 sockaddr_in :: struct {  // Socket address, internet style.
-	family: AddrFamily,
+	family: c.uint8_t,
 	port:   c.uint16_t,
 	addr:   InAddr,
 	zero:   [8]byte,
 }
 
-Linger :: struct {
-	onoff:  c.int, // Linger active
-	linger: c.int, // How long to linger for
-}
-
-Msghdr :: struct {
-	name:       rawptr,  // Socket name
-	namelen:    c.int,   // Length of name
-	iov:        rawptr,  // Data blocks
-	iovlen:     c.int,   // Number of blocks
-	control:    rawptr,  // Per protocol magic (eg BSD file descriptor passing)
-	controllen: c.int,   // Length of rights list
-	flags:      c.int,   // 4.4 BSD field we dont use
-}
-
-
-
 addrinfoFlags :: enum c.int {
     NOT_SET        = 0,
-
-    // my mac seems to set these differently:
-
 	AI_PASSIVE     = 0x00000001, // Socket address is intended for bind.
-	AI_CANONNAME   = 0x00000002, // Request for canonical name.
-	AI_NUMERICHOST = 0x00000004, // Don't use name resolution.
-	// AI_V4MAPPED    = 0x0008, // IPv4 mapped addresses are acceptable.
-	// AI_ALL         = 0x0010, // Return IPv4 mapped and IPv6 addresses.
-	// AI_ADDRCONFIG  = 0x0020, // Use configuration of this host to choose returned address type.
-	AI_NUMERICSERV = 0x00001000, // Don't use name resolution.
 }
 
 addrinfo :: struct {
@@ -163,6 +137,21 @@ Rpcent :: struct {
 	name:    cstring,
 	aliases: ^cstring,
 	proto:   c.int,
+}
+
+Linger :: struct {
+	onoff:  c.int, // Linger active
+	linger: c.int, // How long to linger for
+}
+
+Msghdr :: struct {
+	name:       rawptr,  // Socket name
+	namelen:    c.int,   // Length of name
+	iov:        rawptr,  // Data blocks
+	iovlen:     c.int,   // Number of blocks
+	control:    rawptr,  // Per protocol magic (eg BSD file descriptor passing)
+	controllen: c.int,   // Length of rights list
+	flags:      c.int,   // 4.4 BSD field we dont use
 }
 
 SOMAXCONN :: 128;

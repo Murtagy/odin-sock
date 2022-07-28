@@ -11,10 +11,10 @@ main :: proc() {
 
 	server_addr: sockaddr_in
 
-	connfd := socket(AddrFamily.INET, SocketType.STREAM, 6)
+	connfd := socket(c.int(AF_INET), SocketType.STREAM, 6)
 	fmt.println(" socket: ", connfd)
 
-	server_addr.family 		= AddrFamily.INET
+	server_addr.family 		= AF_INET
 	server_addr.addr.addr  	= htonl(0)
 	server_addr.port 		= htons(8080)
 
