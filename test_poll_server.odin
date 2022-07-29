@@ -42,7 +42,7 @@ main :: proc() {
 
         if descriptor.revents & POLLIN == POLLIN {
             if descriptor.fd == listener {  // listener is ready to read, handle new conn
-                connection := accept(listener, (^sockaddr)(&client_address), addrlen)
+                connection := accept(listener, (^sockaddr)(&client_address), &addrlen)
                 if connection == -1 {
                     fmt.println("Connection failed")
                 }

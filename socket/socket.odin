@@ -12,6 +12,7 @@ import "core:os"
  *  External feedback is highly appreciated.
  */
 
+zero_length :c.uint = 0
 C_Errno :: c.int
 // Communication Domain/Address Family
 ADDRESS_FAMILY :: c.ushort
@@ -185,7 +186,7 @@ foreign libc {
 
     // rubbish       :: proc(i: c.int) ---; // was testing linker
 
-    accept        :: proc(sockfd: os.Handle, addr: ^sockaddr, addrlen: c.uint) -> os.Handle ---;
+    accept        :: proc(sockfd: os.Handle, addr: ^sockaddr, addrlen: ^c.uint) -> os.Handle ---;
     accept4       :: proc(sockfd: os.Handle, addr: ^sockaddr, addrlen: c.uint, flags: c.int) -> os.Handle ---;
     bind          :: proc(sockfd: os.Handle, addr: ^sockaddr, addrlen: c.uint) -> c.int ---;
     connect       :: proc(sockfd: os.Handle, addr: ^sockaddr_in, addrlen: c.uint) -> c.int ---;

@@ -6,6 +6,7 @@ import "core:fmt"
 import "core:os"
 
 
+
 main :: proc() {
 	using socket
 
@@ -34,7 +35,7 @@ main :: proc() {
 
 	for {
 		fmt.println("waiting...")
-		connfd := accept(listener, nil, 0)
+		connfd := accept(listener, nil, &zero_length)
 		fmt.println(
 			" conndf",
 			connfd

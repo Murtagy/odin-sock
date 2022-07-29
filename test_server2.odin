@@ -38,7 +38,7 @@ main :: proc() {
 
 	for {
 		fmt.println("waiting...")
-		connfd := accept(listener, nil, 0)
+		connfd := accept(listener, nil, &zero_length)
 		fmt.println(
 			" conndf",
 			connfd
