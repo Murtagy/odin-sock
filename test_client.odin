@@ -20,12 +20,12 @@ main :: proc() {
 
 	fmt.println(
 		" connect",
-		connect(connfd, &server_addr, size_of(server_addr))
+		connect(connfd, &server_addr, size_of(server_addr)),
 	)
 
 	fmt.println(
 		"I am Broot",
-		os.write_string(cast(os.Handle)connfd, " I am Broot")
+		os.write_string(cast(os.Handle)connfd, " I am Broot"),
 	)
 
 	response : [10240]byte  // 10kb
@@ -36,10 +36,10 @@ main :: proc() {
 	}
 
 	fmt.println(
-		"response len", len
+		"response len", len,
 	)
 	fmt.println(
-		string(response[:len])
+		string(response[:len]),
 	)
 	os.close(connfd)
 	
