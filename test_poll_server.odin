@@ -4,6 +4,7 @@ import "socket"
 import "core:c"
 import "core:fmt"
 import "core:os"
+import "core:slice"
 
 
 YES : c.int = 1
@@ -26,47 +27,71 @@ main :: proc() {
 
     append(&pfds, pollfd{fd=listener, events=POLLIN})
 
-    poll_count := poll(raw_data(pfds), c.int(len(pfds)), -1)
-    if poll_count == -1 {
-        println("poll error")
-    }
 
-    client_data_buffer : [256]c.char;
 
-    for descriptor in pfds {
-        println("descriptor" ,descriptor)
-        // println("fd", descriptor.fd)   // this fails
-        // println("events", descriptor.events)
-        // println("revents", descriptor.revents)
-        // println("BIN", descriptor.revents & POLLIN, descriptor.revents & POLLIN == POLLIN )
+    client_data_buffer : [1_024_000]c.char;
 
-        if descriptor.revents & POLLIN == POLLIN {
-            if descriptor.fd == listener {  // listener is ready to read, handle new conn
-                connection := accept(listener, (^sockaddr)(&client_address), &addrlen)
-                if connection == -1 {
-                    fmt.println("Connection failed")
+    for {
+        print("\nPoll...")
+        poll_count := poll(raw_data(pfds), c.int(len(pfds)), -1)
+        if poll_count == -1 {
+            println("poll error")
+        }
+        print("done\n")
+
+        no_interest_descriptor_idxs: [dynamic]int
+
+        for descriptor, d_idx in pfds {
+            println("descriptor" ,descriptor)
+            // println("fd", descriptor.fd)   // this fails
+            // println("events", descriptor.events)
+            // println("revents", descriptor.revents)
+            println("BIN", descriptor.revents & POLLIN, descriptor.revents & POLLIN == POLLIN )
+
+            if descriptor.revents & POLLIN == POLLIN {
+                if descriptor.fd == listener {  
+                    // listener
+                    // ready to read, handle new conn
+                    fmt.println("listener ready")
+                    connection := accept(listener, (^sockaddr)(&client_address), &addrlen)
+                    if connection == -1 {
+                        fmt.println("Connection failed")
+                    }
+                    else {
+                        println("connection fd", connection)
+                        // todo: print inet_ntop details
+                        append(&pfds, pollfd{fd=connection, events=POLLIN})
+                    }
                 }
                 else {
-                    println("connection fd", connection)
-                    // todo: print inet_ntop details
-                    append(&pfds, pollfd{fd=connection, events=POLLIN})
+                    // client
+                    // let's receive some bytes from it
+                    fmt.println("connection ready")
+                    nbytes := recv(descriptor.fd , raw_data(&client_data_buffer), size_of(client_data_buffer), 0)
+                    if nbytes <= 0 {  // err or closed
+                        if nbytes == 0 {
+                            println(descriptor.fd, "disconnected")
+                        }
+                        else {
+                            println("recv error")
+                        }
+                        // schedule remove the conection
+                        append(&no_interest_descriptor_idxs, d_idx)
+                    }
+                    else {
+                        fmt.println("bytes received", nbytes , "from", descriptor.fd)
+                    }
                 }
             }
-            else {
-                nbytes := recv(descriptor.fd , raw_data(&client_data_buffer), size_of(client_data_buffer), 0)
-                fmt.println("bytes received", nbytes)
-            }
         }
+
+        slice.reverse_sort(no_interest_descriptor_idxs[:])
+        for d_idx in no_interest_descriptor_idxs{
+            ordered_remove(&pfds, d_idx)
+            println("no longer interested...")
+        }
+        println("clients left", len(pfds)-1)
     }
-
-    // connfd := accept(listener, nil, 0)
-    // println(
-    //     " conndf",
-    //     connfd,
-    // )
-
-    // os.write_string(cast(os.Handle)connfd, "Hello, sailor!\n")
-    // os.close(cast(os.Handle) connfd)
 }
 
 
