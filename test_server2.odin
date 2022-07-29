@@ -20,20 +20,20 @@ main :: proc() {
 
     fmt.println(
         "getaddrinfo",
-        getaddrinfo(nil, port, &hints, &serv_addr)
+        getaddrinfo(nil, port, &hints, &serv_addr),
     )
 	listener := socket(serv_addr.family, serv_addr.socktype, serv_addr.protocol)	
 
 	// trying to bind to first, note that systematic bind should iterate next until exhausted
 	fmt.println(
 		" bind",
-		bind(listener,  serv_addr.addr, serv_addr.addrlen)
+		bind(listener,  serv_addr.addr, serv_addr.addrlen),
 	)
 	// fmt.println("!!!", serv_addr.addrlen, size_of(addr))
 
 	fmt.println(
 		" listen",
-		listen(listener, 10)
+		listen(listener, 10),
 	)
 
 	for {
@@ -41,7 +41,7 @@ main :: proc() {
 		connfd := accept(listener, nil, &zero_length)
 		fmt.println(
 			" conndf",
-			connfd
+			connfd,
 		)
 
 		os.write_string(cast(os.Handle)connfd, "Hello, sailor!\n")
