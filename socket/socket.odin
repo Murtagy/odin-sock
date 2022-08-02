@@ -212,6 +212,7 @@ foreign libc {
     ntohs         :: proc(netshort: u16) -> u16 ---;
     poll          :: proc(fds: ^pollfd, number_of_file_descriptors: c.int, timeout: c.int) -> c.int ---;
     recv          :: proc(socket: os.Handle, buffer: ^byte, len: c.int, flags: c.int) -> c.int ---;
+    send          :: proc(socket: os.Handle, msg: cstring, len: c.int, flags: c.int) -> c.int ---;
     sethostent    :: proc(stayopen: c.int) ---;
     setsockopt    :: proc(socket: os.Handle, level: c.int, optname: c.int, optval: ^c.int, socklen: c.uint) -> c.int ---;
     socket        :: proc(domain: c.int, typ: SocketType, protocol: c.int) -> os.Handle ---;
