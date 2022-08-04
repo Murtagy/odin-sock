@@ -17,12 +17,20 @@ INC_BUFFER_SIZE :: (1024 * 16) + 17 // 16 kb + random offset to reduce chance of
 MAX_INC_SIZE :: 40 * 1024 * 1024 // 40 mb
 POOL_SIZE :: 1
 
-INC_DATA := make(map[os.Handle]incomingData)
+REQUESTS_DATA := make(map[os.Handle]Request)  // todo: guard access to it by mutex
+REQUESTS_DATA_mutex := b64(false)
 
-incomingData :: struct {
+Request :: struct {
     len : int,
     data: [dynamic]c.char,
+    response: [dynamic]c.char,
 }
+
+// did_acquire :: proc(m: ^b64) -> (acquired: bool) {
+//     res, ok := intrinsics.atomic_compare_exchange_strong(m, false, true)
+//     return ok && res == false
+// }
+
 
 
 pfds: [dynamic]socket.pollfd
@@ -88,10 +96,10 @@ main :: proc() {
                         // fmt.println("bytes received", n_bytes , "from", descriptor.fd)
                         // fmt.println("request: \n\n", string(client_data_buffer[:n_bytes]), "\n")
 
-                        incoming_data: incomingData
-                        if descriptor.fd in INC_DATA {
+                        incoming_data: Request
+                        if descriptor.fd in REQUESTS_DATA {
                             println("Appending to existing data")
-                            incoming_data = INC_DATA[descriptor.fd]
+                            incoming_data = REQUESTS_DATA[descriptor.fd]
                             // println("\n prev: \n", string(incoming_data.data[:]) , incoming_data.len,  len(incoming_data.data))
                             println("\n prev: \n", incoming_data.len,  len(incoming_data.data))
                         }
@@ -99,21 +107,28 @@ main :: proc() {
                         // for b in client_data_buffer {append(&incoming_data.data, b)}
                         append(&incoming_data.data, ..client_data_buffer[:])
 
-                        INC_DATA[descriptor.fd] = incoming_data
+                        REQUESTS_DATA[descriptor.fd] = incoming_data
 
-                        if n_bytes < INC_BUFFER_SIZE {
-                            // tmp - send OK
-                                // println("\n request: \n", string(incoming_data.data[:incoming_data.len]) , "")
-                            response := "HTTP/1.1 200 OK\n"
+                        if len(incoming_data.data) > MAX_INC_SIZE {
+                                response := "HTTP/1.1 200 OK\n"  // todo: change response
                                 sent := send(descriptor.fd, strings.clone_to_cstring(response, context.temp_allocator), c.int(len(response)), 0)
-                                    println ("send", sent)
                                 closed := os.close(descriptor.fd)
-                                    println("closed", closed)
                                 append(&no_interest_descriptor_idxs, d_idx)
+                        } else {
+                            if n_bytes < INC_BUFFER_SIZE {
+                                // tmp - send OK
+                                    // println("\n request: \n", string(incoming_data.data[:incoming_data.len]) , "")
+                                response := "HTTP/1.1 200 OK\n" // todo: schedule response handler
+                                    sent := send(descriptor.fd, strings.clone_to_cstring(response, context.temp_allocator), c.int(len(response)), 0)
+                                        println ("send", sent)
+                                    closed := os.close(descriptor.fd)
+                                        println("closed", closed)
+                                    append(&no_interest_descriptor_idxs, d_idx)
                             }
-                        else {
-                            println("__Partial_read__")
-                            // expecting more data to come
+                            else {
+                                println("__Partial_read__")
+                                // expecting more data to come
+                            }
                         }
                         println(time.diff(t1, time.now()))
                     }
@@ -127,7 +142,7 @@ main :: proc() {
             println("popping", d_idx)
             fd := pfds[d_idx]
             ordered_remove(&pfds, d_idx)
-            delete_key(&INC_DATA, fd.fd)
+            delete_key(&REQUESTS_DATA, fd.fd)
             println("no longer interested...", d_idx, fd)
         }
         no_interest_descriptor_idxs = {}
@@ -170,3 +185,9 @@ get_listener_socket :: proc() -> os.Handle {
 	)
     return listener
 }
+
+// handle_full_populated_request_task :: proc(os.Handle) -> (request_with_response: Request) {
+
+
+// }
+
