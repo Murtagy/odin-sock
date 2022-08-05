@@ -8,6 +8,7 @@ import "core:mem"
 import "core:os"
 import "core:slice"
 import "core:strings"
+import "core:sync"
 import "core:thread"
 import "core:time"
 
@@ -17,10 +18,11 @@ YES_SIZE : c.uint = size_of(YES)
 
 INC_BUFFER_SIZE :: (1024 * 16) + 17 // 16 kb + random offset to reduce chance of situations when request size is INC_BUFFER_SIZE times X
 MAX_INC_SIZE :: 40 * 1024 * 1024 // 40 mb
-POOL_SIZE :: 1
+POOL_SIZE :: 4
 
 REQUESTS_DATA := make(map[os.Handle]Request)  // thread-shared resource, access should be guarded by mutex
-REQUESTS_DATA_mutex := b64(false)
+// REQUESTS_DATA_mutex := b64(false)
+REQUESTS_DATA_mutex : sync.Mutex
 no_interest_descriptor_idxs: [dynamic]int  // TODO - guard with mutex !!
 
 Request :: struct {
@@ -43,6 +45,7 @@ main :: proc() {
 	using socket
     addrlen : c.uint = size_of(socklen_t)
 
+
     listener := get_listener_socket()
     if listener == -1 {
         println("error getting listening socket")
@@ -53,6 +56,7 @@ main :: proc() {
 
     append(&pfds, pollfd{fd=listener, events=POLLIN})
 
+    // sync.mutex_init(&REQUESTS_DATA_mutex)
     // pool := make_pool()
     pool: thread.Pool
     thread.pool_init(pool=&pool, thread_count=POOL_SIZE, allocator=context.allocator)
@@ -61,7 +65,7 @@ main :: proc() {
 
     for {
         print("\nPoll...")
-        poll_count := poll(raw_data(pfds), c.int(len(pfds)), -1);
+        poll_count := poll(raw_data(pfds), c.int(len(pfds)), 2500);
         print("done\n")
         if poll_count == -1 { println("poll error") }
 
@@ -78,6 +82,7 @@ main :: proc() {
                     connection := accept(listener, (^sockaddr)(&client_address), &addrlen)
                     if connection == -1 {
                         fmt.println("Connection failed")
+                        append(&no_interest_descriptor_idxs, d_idx)
                     }
                     else {
                         append(&pfds, pollfd{fd=connection, events=POLLIN})
@@ -98,6 +103,7 @@ main :: proc() {
                         }
                         // schedule remove the conection
                         append(&no_interest_descriptor_idxs, d_idx)
+
                     }
                     else {
                         t1 := time.now()
@@ -106,8 +112,9 @@ main :: proc() {
 
                         incoming_data: Request
                         {
-                            for did_acquire(&REQUESTS_DATA_mutex) {thread.yield()}
-                            defer {REQUESTS_DATA_mutex=false}
+                            // for did_acquire(&REQUESTS_DATA_mutex) {thread.yield()}
+                            // defer {REQUESTS_DATA_mutex=false}
+                            sync.guard(&REQUESTS_DATA_mutex)
 
                             fd, ok := REQUESTS_DATA[descriptor.fd]
                             if ok && fd.finished != true{
@@ -153,16 +160,25 @@ main :: proc() {
 
         // drop connections 
         {
-            for did_acquire(&REQUESTS_DATA_mutex) {thread.yield()}
-            defer {REQUESTS_DATA_mutex=false}
+            sync.guard(&REQUESTS_DATA_mutex)
+            // for did_acquire(&REQUESTS_DATA_mutex) {thread.yield()}
+            // defer {REQUESTS_DATA_mutex=false}
 
             for descriptor, request in REQUESTS_DATA {
                 if request.finished { 
                     for pollfd, idx in pfds {
                         if descriptor == pollfd.fd {
-                            append(&no_interest_descriptor_idxs, idx)
-                            println("sent response to ", pollfd.fd, "dropping it", idx)
-                            break  // if we put no break we have a chance to drop a new connection which has same desriptor
+
+                            // when I stopped apache test which causes recv error I seen index errors due to index being added twice
+                            // adding a stupid if check for now (idx_NOT_IN_no_interest_descriptor_idxs)
+
+                            idx_NOT_IN_no_interest_descriptor_idxs := true
+                            for nidx in no_interest_descriptor_idxs {if nidx == idx {idx_NOT_IN_no_interest_descriptor_idxs=false}}
+                            if idx_NOT_IN_no_interest_descriptor_idxs {
+                                append(&no_interest_descriptor_idxs, idx)
+                                println("sent response to ", pollfd.fd, "dropping it", idx)
+                                break  // if we put no break we have a chance to drop a new connection which has same desriptor
+                            }
                         }
                     }
                 }
@@ -239,8 +255,9 @@ handle_full_populated_request_task :: proc(t: thread.Task) {
     {
         // fmt.println("1")
         // todo: see sync.guard
-        for did_acquire(&REQUESTS_DATA_mutex) {thread.yield()}
-        defer {REQUESTS_DATA_mutex=false}
+        sync.guard(&REQUESTS_DATA_mutex)
+        // for did_acquire(&REQUESTS_DATA_mutex) {thread.yield()}
+        // defer {REQUESTS_DATA_mutex=false}
         // fmt.println("2")
 
         request := REQUESTS_DATA[request_descriptor]
@@ -256,8 +273,9 @@ handle_full_populated_request_task :: proc(t: thread.Task) {
     // append(&no_interest_descriptor_idxs, pfds_idx)
     {
         // fmt.println("3")
-        for did_acquire(&REQUESTS_DATA_mutex) {thread.yield()}
-        defer {REQUESTS_DATA_mutex=false}
+        sync.guard(&REQUESTS_DATA_mutex)
+        // for did_acquire(&REQUESTS_DATA_mutex) {thread.yield()}
+        // defer {REQUESTS_DATA_mutex=false}
         // fmt.println("4")
 
         request.finished = true
@@ -270,6 +288,7 @@ handle_full_populated_request_task :: proc(t: thread.Task) {
 
 
 handle_ping :: proc(request: string) -> (response: string) {
+    fmt.println(request)
     fmt.println("PING!!")
     return "HTTP/1.1 200 OK\n"
 }
