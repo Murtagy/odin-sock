@@ -23,14 +23,11 @@ MAX_CONNECTIONS :: 1024
 
 
 REQUESTS_DATA := make(map[os.Handle]Request)  // thread-shared resource, access should be guarded by mutex
-// REQUESTS_DATA_mutex := b64(false)
 REQUESTS_DATA_mutex : sync.Mutex
-no_interest_descriptor_idxs: [dynamic]int  // TODO - guard with mutex !!
 
 Request :: struct {
     len : int,
     responsed: bool,
-    pfds_index: int,
     data: [dynamic]c.char,
 }
 
@@ -87,17 +84,19 @@ main :: proc() {
 
         { sync.guard(&REQUESTS_DATA_mutex)
             for descriptor, d_idx in pfds {
+
                 if descriptor.revents & POLLIN == POLLIN {
-                    if descriptor.fd == listener {  
+                    con := descriptor.fd
+
+                    if con == listener {  
                         connection_fd := accept(listener, (^sockaddr)(&client_address), &addrlen)
                         if connection_fd == -1 { 
                             println("Connection failed")
                         }
                         else {
-                            request : Request = {pfds_index=d_idx}
+                            request : Request = {}
                             REQUESTS_DATA[connection_fd] = request
                             add_to_pfds(&pfds, connection_fd, &current_connections)
-                            println(pfds[:5])
                             println("connection fd", connection_fd) // todo: print inet_ntop details
 
                         }
@@ -106,33 +105,34 @@ main :: proc() {
                         // client - let's receive some bytes from it
                         fmt.println("connection sent some data", descriptor)
 
-                        n_bytes := recv(descriptor.fd , raw_data(&client_data_buffer), size_of(client_data_buffer), 0)
+                        n_bytes := recv(con , raw_data(&client_data_buffer), size_of(client_data_buffer), 0)
                         if n_bytes <= 0 {  // err or closed
                             if n_bytes == 0 {
-                                println(descriptor.fd, "disconnected")
+                                println(con, "disconnected")
                             }
                             else {
                                 println("recv error")
                             }
-                            append(&no_interest_descriptor_idxs, d_idx)
+                            delete_key(&REQUESTS_DATA, con)
+                            del_from_pfds(&pfds, d_idx, &current_connections)
+                            os.close(con)
 
                         }
                         else {
                             t1 := time.now()
 
-                            incoming_data := REQUESTS_DATA[descriptor.fd]
+                            incoming_data := REQUESTS_DATA[con]
                             incoming_data.len += int(n_bytes);
                             append(&incoming_data.data, ..client_data_buffer[:])
-                            REQUESTS_DATA[descriptor.fd] = incoming_data
+                            REQUESTS_DATA[con] = incoming_data
 
                             if len(incoming_data.data) > MAX_INC_SIZE {
                                 // for too big responses we don't pass it to thread pool so far
-                                fd := descriptor.fd
                                 response := "Request too big \n"  // todo: handle better
-                                sent := send(fd, strings.clone_to_cstring(response, context.temp_allocator), c.int(len(response)), 0)
-                                delete_key(&REQUESTS_DATA, descriptor.fd)
+                                sent := send(con, strings.clone_to_cstring(response, context.temp_allocator), c.int(len(response)), 0)
+                                delete_key(&REQUESTS_DATA, con)
                                 del_from_pfds(&pfds, d_idx, &current_connections)
-                                os.close(descriptor.fd)
+                                os.close(con)
                             } else {
                                 if n_bytes < INC_BUFFER_SIZE {
                                     println("Full read")
@@ -141,7 +141,7 @@ main :: proc() {
                                         pool=&pool,
                                         procedure=handle_full_populated_request_task,
                                         data=nil, //&descriptor.fd,
-                                        user_index=int(descriptor.fd),
+                                        user_index=int(con),
                                         allocator=context.allocator,
                                     )
                                 }
@@ -153,14 +153,6 @@ main :: proc() {
                             println(time.diff(t1, time.now()))
                         }
                     }
-                }
-            }
-
-            // drop connections 
-            for descriptor, request in REQUESTS_DATA {
-                if request.responsed { 
-                    delete_key(&REQUESTS_DATA, descriptor)
-                    os.close(descriptor)
                 }
             }
         }
