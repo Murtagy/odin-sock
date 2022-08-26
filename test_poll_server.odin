@@ -147,7 +147,7 @@ main :: proc() {
                                 delete_key(&REQUESTS_DATA, con)
                                 closed := os.close(con)
 
-                                if closed == {log.panic("CLOSED")}
+                                if closed == false {log.panic("CLOSED")}
                                 log.panic("BIG")
                             } else {
                                 if n_bytes < INC_BUFFER_SIZE {
@@ -168,6 +168,7 @@ main :: proc() {
                                 }
                             }
                             log.debug("time", time.diff(t1, time.now()))
+                            time.sleep(1 * time.Millisecond)  // for some crazy reason server freezes at 16339 +- 50 requests
                         }
                     }
                 }
