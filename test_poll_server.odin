@@ -18,7 +18,9 @@ YES_SIZE : c.uint = size_of(YES)
 
 INC_BUFFER_SIZE :: (1024 * 16) + 17 // 16 kb + random offset to reduce chance of situations when request size is INC_BUFFER_SIZE times X
 MAX_INC_SIZE :: 40 * 1024 * 1024 // 40 mb
-POOL_SIZE :: 4
+POOL_SIZE :: 1
+MAX_CONNECTIONS :: 1024
+
 
 REQUESTS_DATA := make(map[os.Handle]Request)  // thread-shared resource, access should be guarded by mutex
 // REQUESTS_DATA_mutex := b64(false)
@@ -26,9 +28,10 @@ REQUESTS_DATA_mutex : sync.Mutex
 no_interest_descriptor_idxs: [dynamic]int  // TODO - guard with mutex !!
 
 Request :: struct {
-    data: [dynamic]c.char,
     len : int,
-    finished: bool,
+    responsed: bool,
+    pfds_index: int,
+    data: [dynamic]c.char,
 }
 
 did_acquire :: proc(m: ^b64) -> (acquired: bool) {
@@ -36,9 +39,24 @@ did_acquire :: proc(m: ^b64) -> (acquired: bool) {
     return ok && res == false
 }
 
+pfds_T :: [MAX_CONNECTIONS]socket.pollfd
+
+listener_n :: 1
+current_connections : int
 
 
-pfds: [dynamic]socket.pollfd
+add_to_pfds :: proc(pfds: ^pfds_T, new: os.Handle, current_last_index: ^int) {
+    using socket
+
+    current_last_index^ += 1
+    pfds[current_last_index^] = pollfd{fd=new, events=POLLIN}
+}
+
+del_from_pfds :: proc (pfds: ^pfds_T, del_index: int, current_last_index: ^int) {
+    pfds[del_index] = pfds[current_last_index^]
+    current_last_index^ -= 1
+}
+
 
 main :: proc() {
     using fmt
@@ -54,160 +72,101 @@ main :: proc() {
     client_address: sockaddr_storage
     client_data_buffer : [INC_BUFFER_SIZE]c.char;
 
-    append(&pfds, pollfd{fd=listener, events=POLLIN})
-
-    // sync.mutex_init(&REQUESTS_DATA_mutex)
-    // pool := make_pool()
     pool: thread.Pool
     thread.pool_init(pool=&pool, thread_count=POOL_SIZE, allocator=context.allocator)
     thread.pool_start(&pool)
     defer thread.pool_destroy(&pool)
 
+    pfds: pfds_T
+    pfds[0] = pollfd{fd=listener, events=POLLIN}
+
     for {
         print("\nPoll...")
-        poll_count := poll(raw_data(pfds), c.int(len(pfds)), 2500);
-        print("done\n")
+        poll_count := poll(raw_data(&pfds), c.int(current_connections + listener_n), -1); print("done\n")
         if poll_count == -1 { println("poll error") }
 
-
-        for descriptor, d_idx in pfds {
-            // println("descriptor", descriptor.fd == listener ,descriptor)
-            // println("BIN", descriptor.revents & POLLIN, descriptor.revents & POLLIN == POLLIN )
-
-            if descriptor.revents & POLLIN == POLLIN {
-                if descriptor.fd == listener {  
-                    // listener - ready to read, handle new conn
-                    // fmt.println("listener ready")
-
-                    connection := accept(listener, (^sockaddr)(&client_address), &addrlen)
-                    if connection == -1 {
-                        fmt.println("Connection failed")
-                        append(&no_interest_descriptor_idxs, d_idx)
-                    }
-                    else {
-                        append(&pfds, pollfd{fd=connection, events=POLLIN})
-                            println("connection fd", connection) // todo: print inet_ntop details
-                    }
-                }
-                else {
-                    // client - let's receive some bytes from it
-                    fmt.println("connection sent some data", descriptor)
-
-                    n_bytes := recv(descriptor.fd , raw_data(&client_data_buffer), size_of(client_data_buffer), 0)
-                    if n_bytes <= 0 {  // err or closed
-                        if n_bytes == 0 {
-                            println(descriptor.fd, "disconnected")
+        { sync.guard(&REQUESTS_DATA_mutex)
+            for descriptor, d_idx in pfds {
+                if descriptor.revents & POLLIN == POLLIN {
+                    if descriptor.fd == listener {  
+                        connection_fd := accept(listener, (^sockaddr)(&client_address), &addrlen)
+                        if connection_fd == -1 { 
+                            println("Connection failed")
                         }
                         else {
-                            println("recv error")
-                        }
-                        // schedule remove the conection
-                        append(&no_interest_descriptor_idxs, d_idx)
+                            request : Request = {pfds_index=d_idx}
+                            REQUESTS_DATA[connection_fd] = request
+                            add_to_pfds(&pfds, connection_fd, &current_connections)
+                            println(pfds[:5])
+                            println("connection fd", connection_fd) // todo: print inet_ntop details
 
+                        }
                     }
                     else {
-                        t1 := time.now()
-                        // fmt.println("bytes received", n_bytes , "from", descriptor.fd)
-                        // fmt.println("request: \n\n", string(client_data_buffer[:n_bytes]), "\n")
+                        // client - let's receive some bytes from it
+                        fmt.println("connection sent some data", descriptor)
 
-                        incoming_data: Request
-                        {
-                            // for did_acquire(&REQUESTS_DATA_mutex) {thread.yield()}
-                            // defer {REQUESTS_DATA_mutex=false}
-                            sync.guard(&REQUESTS_DATA_mutex)
-
-                            fd, ok := REQUESTS_DATA[descriptor.fd]
-                            if ok && fd.finished != true{
-                                println("Appending to existing data")
-                                println(fd)
-                                incoming_data = REQUESTS_DATA[descriptor.fd]
-                                // println("\n prev: \n", string(incoming_data.data[:]) , incoming_data.len,  len(incoming_data.data))
-                                println("\n prev: \n", incoming_data.len,  len(incoming_data.data))
-                            }
-                            incoming_data.len += int(n_bytes);
-                            // for b in client_data_buffer {append(&incoming_data.data, b)}
-                            append(&incoming_data.data, ..client_data_buffer[:])
-
-                            REQUESTS_DATA[descriptor.fd] = incoming_data
-                        }
-
-                        if len(incoming_data.data) > MAX_INC_SIZE {
-                                response := "HTTP/1.1 200 OK\n"  // todo: change response
-                                sent := send(descriptor.fd, strings.clone_to_cstring(response, context.temp_allocator), c.int(len(response)), 0)
-                                closed := os.close(descriptor.fd)
-                                append(&no_interest_descriptor_idxs, d_idx)
-                        } else {
-                            if n_bytes < INC_BUFFER_SIZE {
-                                println("Full read")
-                                thread.pool_add_task(
-                                    pool=&pool,
-                                    procedure=handle_full_populated_request_task,
-                                    data=nil, //&descriptor.fd,
-                                    user_index=int(descriptor.fd),
-                                    allocator=context.allocator,
-                                )
+                        n_bytes := recv(descriptor.fd , raw_data(&client_data_buffer), size_of(client_data_buffer), 0)
+                        if n_bytes <= 0 {  // err or closed
+                            if n_bytes == 0 {
+                                println(descriptor.fd, "disconnected")
                             }
                             else {
-                                println("__Partial_read__")
-                                // expecting more data to come
+                                println("recv error")
                             }
+                            append(&no_interest_descriptor_idxs, d_idx)
+
                         }
-                        println(time.diff(t1, time.now()))
+                        else {
+                            t1 := time.now()
+
+                            incoming_data := REQUESTS_DATA[descriptor.fd]
+                            incoming_data.len += int(n_bytes);
+                            append(&incoming_data.data, ..client_data_buffer[:])
+                            REQUESTS_DATA[descriptor.fd] = incoming_data
+
+                            if len(incoming_data.data) > MAX_INC_SIZE {
+                                // for too big responses we don't pass it to thread pool so far
+                                fd := descriptor.fd
+                                response := "Request too big \n"  // todo: handle better
+                                sent := send(fd, strings.clone_to_cstring(response, context.temp_allocator), c.int(len(response)), 0)
+                                delete_key(&REQUESTS_DATA, descriptor.fd)
+                                del_from_pfds(&pfds, d_idx, &current_connections)
+                                os.close(descriptor.fd)
+                            } else {
+                                if n_bytes < INC_BUFFER_SIZE {
+                                    println("Full read")
+                                    del_from_pfds(&pfds, d_idx, &current_connections)
+                                    thread.pool_add_task(
+                                        pool=&pool,
+                                        procedure=handle_full_populated_request_task,
+                                        data=nil, //&descriptor.fd,
+                                        user_index=int(descriptor.fd),
+                                        allocator=context.allocator,
+                                    )
+                                }
+                                else {
+                                    println("__Partial_read__")
+                                    // expecting more data to come
+                                }
+                            }
+                            println(time.diff(t1, time.now()))
+                        }
                     }
                 }
             }
-        }
 
-        // drop connections 
-        {
-            sync.guard(&REQUESTS_DATA_mutex)
-            // for did_acquire(&REQUESTS_DATA_mutex) {thread.yield()}
-            // defer {REQUESTS_DATA_mutex=false}
-
+            // drop connections 
             for descriptor, request in REQUESTS_DATA {
-                if request.finished { 
-                    for pollfd, idx in pfds {
-                        if descriptor == pollfd.fd {
-
-                            // when I stopped apache test which causes recv error I seen index errors due to index being added twice
-                            // adding a stupid if check for now (idx_NOT_IN_no_interest_descriptor_idxs)
-
-                            idx_NOT_IN_no_interest_descriptor_idxs := true
-                            for nidx in no_interest_descriptor_idxs {if nidx == idx {idx_NOT_IN_no_interest_descriptor_idxs=false}}
-                            if idx_NOT_IN_no_interest_descriptor_idxs {
-                                append(&no_interest_descriptor_idxs, idx)
-                                println("sent response to ", pollfd.fd, "dropping it", idx)
-                                break  // if we put no break we have a chance to drop a new connection which has same desriptor
-                            }
-                        }
-                    }
+                if request.responsed { 
+                    delete_key(&REQUESTS_DATA, descriptor)
+                    os.close(descriptor)
                 }
             }
-
-            slice.reverse_sort(no_interest_descriptor_idxs[:])
-            for d_idx in no_interest_descriptor_idxs{
-                println("popping", d_idx)
-                fd := pfds[d_idx]
-                ordered_remove(&pfds, d_idx)
-                delete_key(&REQUESTS_DATA, fd.fd)
-                // closed := os.close(fd.fd)
-                println("no longer interested...", d_idx, fd)  //"closed", closed)
-            }
-            no_interest_descriptor_idxs = {}
-            println("clients left", len(pfds)-1)
-
-
         }
     }
 }
 
-
-make_pool :: proc() -> thread.Pool {
-    pool: thread.Pool
-    thread.pool_init(pool=&pool, thread_count=POOL_SIZE, allocator=context.allocator)
-    thread.pool_start(&pool)
-    return pool
-}
 
 get_listener_socket :: proc() -> os.Handle {
     using socket
@@ -253,35 +212,23 @@ handle_full_populated_request_task :: proc(t: thread.Task) {
     request: Request
     request_text : string
     {
-        // fmt.println("1")
-        // todo: see sync.guard
         sync.guard(&REQUESTS_DATA_mutex)
-        // for did_acquire(&REQUESTS_DATA_mutex) {thread.yield()}
-        // defer {REQUESTS_DATA_mutex=false}
-        // fmt.println("2")
-
         request := REQUESTS_DATA[request_descriptor]
-        request_text = string(request.data[:])
     }
-
+    request_text = string(request.data[:])
 
     response := handle_ping(request_text)
     c_response := strings.clone_to_cstring(response, context.temp_allocator)
+    fmt.println("response", c_response)
     sent := socket.send(request_descriptor, c_response, c.int(len(c_response)), 0)
     fmt.println("sent", sent)
-    // fmt.println("2.5")
-    // append(&no_interest_descriptor_idxs, pfds_idx)
-    {
-        // fmt.println("3")
-        sync.guard(&REQUESTS_DATA_mutex)
-        // for did_acquire(&REQUESTS_DATA_mutex) {thread.yield()}
-        // defer {REQUESTS_DATA_mutex=false}
-        // fmt.println("4")
 
-        request.finished = true
-        REQUESTS_DATA[request_descriptor] = request
+    {
+        sync.guard(&REQUESTS_DATA_mutex)
+
+        os.close(request_descriptor)
+        delete_key(&REQUESTS_DATA, request_descriptor)
     }
-    closed := os.close(request_descriptor)
 
     fmt.println("Finishing task")
 }
@@ -293,4 +240,8 @@ handle_ping :: proc(request: string) -> (response: string) {
     return "HTTP/1.1 200 OK\n"
 }
 
+// multi syncs
+// Requests per second:    60.66 [#/sec] (mean)
 
+// less syncs
+// Requests per second:    49.21 [#/sec] (mean)
