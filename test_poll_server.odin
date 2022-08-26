@@ -4,6 +4,7 @@ import "socket"
 import "core:c"
 import "core:fmt"
 import "core:intrinsics"
+import "core:log"
 import "core:mem"
 import "core:os"
 import "core:slice"
@@ -18,8 +19,8 @@ YES_SIZE : c.uint = size_of(YES)
 
 INC_BUFFER_SIZE :: (1024 * 16) + 17 // 16 kb + random offset to reduce chance of situations when request size is INC_BUFFER_SIZE times X
 MAX_INC_SIZE :: 40 * 1024 * 1024 // 40 mb
-POOL_SIZE :: 1
-MAX_CONNECTIONS :: 1024
+POOL_SIZE :: 2
+MAX_CONNECTIONS :: 8
 
 
 REQUESTS_DATA := make(map[os.Handle]Request)  // thread-shared resource, access should be guarded by mutex
@@ -47,23 +48,33 @@ add_to_pfds :: proc(pfds: ^pfds_T, new: os.Handle, current_last_index: ^int) {
 
     current_last_index^ += 1
     pfds[current_last_index^] = pollfd{fd=new, events=POLLIN}
+    log.debug("Added", new, "at index", current_last_index^)
 }
 
-del_from_pfds :: proc (pfds: ^pfds_T, del_index: int, current_last_index: ^int) {
-    pfds[del_index] = pfds[current_last_index^]
-    current_last_index^ -= 1
+del_from_pfds :: proc (pfds: ^pfds_T, del_index: int, current_last_index: ^int, loop_index: ^int) {
+    loop_index^ -= 1  // lower the index to revisit (if needed) the element which is now placed under del_index
+
+    if del_index != current_last_index^ {
+        pfds[del_index] = pfds[current_last_index^]
+        log.debug("Placed", current_last_index^, "at index", del_index, ". Loop index", loop_index^)
+    }
+
+    current_last_index^ -= 1 
 }
 
 
 main :: proc() {
     using fmt
 	using socket
+
+    context.logger = log.create_console_logger()
+
     addrlen : c.uint = size_of(socklen_t)
 
 
     listener := get_listener_socket()
     if listener == -1 {
-        println("error getting listening socket")
+        log.error("error getting listening socket")
     }
 
     client_address: sockaddr_storage
@@ -78,12 +89,14 @@ main :: proc() {
     pfds[0] = pollfd{fd=listener, events=POLLIN}
 
     for {
-        print("\nPoll...")
-        poll_count := poll(raw_data(&pfds), c.int(current_connections + listener_n), -1); print("done\n")
-        if poll_count == -1 { println("poll error") }
+        log.info("\nPoll...", c.int(current_connections + listener_n), pfds[:current_connections + listener_n + 2])
+        poll_count := poll(raw_data(&pfds), c.int(current_connections + listener_n), -1)
+        log.debug("poll_done\n")
+        if poll_count == -1 { log.panic("poll error") }
 
         { sync.guard(&REQUESTS_DATA_mutex)
-            for descriptor, d_idx in pfds {
+            for d_idx := 0; d_idx < (current_connections + listener_n); d_idx += 1 {
+                descriptor := pfds[d_idx]
 
                 if descriptor.revents & POLLIN == POLLIN {
                     con := descriptor.fd
@@ -91,32 +104,32 @@ main :: proc() {
                     if con == listener {  
                         connection_fd := accept(listener, (^sockaddr)(&client_address), &addrlen)
                         if connection_fd == -1 { 
-                            println("Connection failed")
+                            log.panic("Connection failed")
                         }
                         else {
                             request : Request = {}
                             REQUESTS_DATA[connection_fd] = request
                             add_to_pfds(&pfds, connection_fd, &current_connections)
-                            println("connection fd", connection_fd) // todo: print inet_ntop details
+                            log.debug("connection fd", connection_fd) // todo: print inet_ntop details
 
                         }
                     }
                     else {
                         // client - let's receive some bytes from it
-                        fmt.println("connection sent some data", descriptor)
+                        log.debug("connection sent some data", descriptor)
 
                         n_bytes := recv(con , raw_data(&client_data_buffer), size_of(client_data_buffer), 0)
                         if n_bytes <= 0 {  // err or closed
                             if n_bytes == 0 {
-                                println(con, "disconnected")
+                                log.debug(con, "disconnected")
                             }
                             else {
-                                println("recv error")
+                                log.debug("recv error")
                             }
+                            del_from_pfds(&pfds, d_idx, &current_connections, &d_idx)
                             delete_key(&REQUESTS_DATA, con)
-                            del_from_pfds(&pfds, d_idx, &current_connections)
-                            os.close(con)
-
+                            closed := os.close(con)
+                            if closed == false {log.panic("CLOSED")}
                         }
                         else {
                             t1 := time.now()
@@ -130,13 +143,17 @@ main :: proc() {
                                 // for too big responses we don't pass it to thread pool so far
                                 response := "Request too big \n"  // todo: handle better
                                 sent := send(con, strings.clone_to_cstring(response, context.temp_allocator), c.int(len(response)), 0)
+                                del_from_pfds(&pfds, d_idx, &current_connections, &d_idx)
                                 delete_key(&REQUESTS_DATA, con)
-                                del_from_pfds(&pfds, d_idx, &current_connections)
-                                os.close(con)
+                                closed := os.close(con)
+
+                                if closed == {log.panic("CLOSED")}
+                                log.panic("BIG")
                             } else {
                                 if n_bytes < INC_BUFFER_SIZE {
-                                    println("Full read")
-                                    del_from_pfds(&pfds, d_idx, &current_connections)
+                                    log.debug("Full read")
+                                    del_from_pfds(&pfds, d_idx, &current_connections,  &d_idx)
+                                    // handle_full_populated_request_task(con)
                                     thread.pool_add_task(
                                         pool=&pool,
                                         procedure=handle_full_populated_request_task,
@@ -146,11 +163,11 @@ main :: proc() {
                                     )
                                 }
                                 else {
-                                    println("__Partial_read__")
+                                    log.warn("__Partial_read__")
                                     // expecting more data to come
                                 }
                             }
-                            println(time.diff(t1, time.now()))
+                            log.debug("time", time.diff(t1, time.now()))
                         }
                     }
                 }
@@ -164,14 +181,14 @@ get_listener_socket :: proc() -> os.Handle {
     using socket
 
 	listener := socket(c.int(AF_INET), SocketType.STREAM, 6)
-	fmt.println(" listener socket: ", listener)
+	log.debug(" listener socket: ", listener)
 
-    fmt.println(
+    log.debug(
         "setsockopt",
         setsockopt(listener, SOL_SOCKET, SO_REUSEADDR, &YES, YES_SIZE),
     )
 
-    fmt.println(
+    log.debug(
         "getsockopt",
         getsockopt(listener, SOL_SOCKET, SO_REUSEADDR, &YES, &YES_SIZE),
     )
@@ -179,27 +196,27 @@ get_listener_socket :: proc() -> os.Handle {
 	serv_addr.family = AF_INET
 	serv_addr.addr.addr =  htonl(0)
 	serv_addr.port = htons(8080)
-    fmt.println(serv_addr)
-	fmt.println((^sockaddr)(&serv_addr) , "SIZE", size_of((^sockaddr)(&serv_addr)))
+    log.debug(serv_addr)
+	log.debug((^sockaddr)(&serv_addr) , "SIZE", size_of((^sockaddr)(&serv_addr)))
 
-	fmt.println(
+	log.debug(
 		" bind",
 		bind(listener, (^sockaddr)(&serv_addr), size_of(serv_addr)),
 	)
 	
 
-	fmt.println(
+	log.debug(
 		" listen",
 		listen(listener, 10),
 	)
     return listener
 }
 
+
 handle_full_populated_request_task :: proc(t: thread.Task) {
     // descriptor :os.Handle = (^os.Handle)(t.data)^;
-    fmt.println("TRYING TO HANDLE A REQUEST TASK!")
+    log.debug("TRYING TO HANDLE A REQUEST TASK!", t.user_index)
     request_descriptor := os.Handle(t.user_index)
-    fmt.println("request_descriptor", request_descriptor)
 
     request: Request
     request_text : string
@@ -211,24 +228,25 @@ handle_full_populated_request_task :: proc(t: thread.Task) {
 
     response := handle_ping(request_text)
     c_response := strings.clone_to_cstring(response, context.temp_allocator)
-    fmt.println("response", c_response)
+    // fmt.println("response", c_response)
     sent := socket.send(request_descriptor, c_response, c.int(len(c_response)), 0)
-    fmt.println("sent", sent)
+    log.debug("response sent: ", sent)
 
     {
         sync.guard(&REQUESTS_DATA_mutex)
 
-        os.close(request_descriptor)
+        closed := os.close(request_descriptor)
+        if closed == false {log.panic("CLOSED")}
         delete_key(&REQUESTS_DATA, request_descriptor)
     }
 
-    fmt.println("Finishing task")
+    log.debug("Finishing task")
 }
 
 
 handle_ping :: proc(request: string) -> (response: string) {
-    fmt.println(request)
-    fmt.println("PING!!")
+    // fmt.println(request)
+    log.debug("PING!!")
     return "HTTP/1.1 200 OK\n"
 }
 
