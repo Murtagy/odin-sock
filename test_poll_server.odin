@@ -17,10 +17,10 @@ import "core:time"
 YES : c.int = 1
 YES_SIZE : c.uint = size_of(YES)
 
-INC_BUFFER_SIZE :: (1024 * 16) + 17 // 16 kb + random offset to reduce chance of situations when request size is INC_BUFFER_SIZE times X
-MAX_INC_SIZE :: 40 * 1024 * 1024 // 40 mb
-POOL_SIZE :: 2
-MAX_CONNECTIONS :: 8
+INC_BUFFER_SIZE ::  16384         // note from Python socket module: for best batch with hardware and network realities, the values of bufsize should be a relatively small power of 2, for example 4096
+MAX_INC_SIZE :: 40 * 1024 * 1024  // 40 mb
+POOL_SIZE :: 4                    // TODO: calculate by system
+MAX_CONNECTIONS :: 100            // the value is random
 
 
 REQUESTS_DATA := make(map[os.Handle]Request)  // thread-shared resource, access should be guarded by mutex
@@ -28,7 +28,6 @@ REQUESTS_DATA_mutex : sync.Mutex
 
 Request :: struct {
     len : int,
-    responsed: bool,
     data: [dynamic]c.char,
 }
 
@@ -38,7 +37,6 @@ did_acquire :: proc(m: ^b64) -> (acquired: bool) {
 }
 
 pfds_T :: [MAX_CONNECTIONS]socket.pollfd
-
 listener_n :: 1
 current_connections : int
 
