@@ -231,7 +231,15 @@ handle_full_populated_request_task :: proc(t: thread.Task) {
     // log.debug("TRYING TO HANDLE A REQUEST TASK!", t.user_index)
     using parser
 
+
+    if t.user_index == 0 || t.user_index > 1000 {
+        fmt.println("The user_index is weird. Not doing anything... ")
+        fmt.println("t.user_index", t.user_index)
+        return
+    }
+    
     fmt.println("!in task", t.user_index)
+
     request_descriptor := os.Handle(t.user_index)
 
     request: Request
