@@ -27,9 +27,49 @@ foreign picohttpparser {
 }
 
 
-buf : [4096]cstring
 
+MAX_HEADERS :: 100
+MAX_HEADERS_int : size_t = MAX_HEADERS
+
+HttpRequest :: struct {
+    raw : [dynamic]c.char,
+
+    method        : cstring           ,
+    method_len    : size_t            ,
+    path          : cstring           ,
+    path_len      : size_t            ,
+    headers       : [MAX_HEADERS]phr_header   ,
+    num_headers   : size_t            ,
+    minor_version : c.int             ,
+}
+
+parse_request :: proc(pre_request: ^HttpRequest) -> bool {
+    using pre_request
+    // fmt.println("raw", raw)
+    cstr := strings.clone_to_cstring(string(pre_request.raw[:]), context.allocator) // temp_allocator?
+    // fmt.println("PARSE")
+    // fmt.println(pre_request.num_headers, MAX_HEADERS_int)
+
+    err := phr_parse_request(
+        cstr,
+        size_t(len(cstr)),
+        &method,
+        &method_len,
+        &path,
+        &path_len,
+        &minor_version,
+        raw_data(&headers),
+        &MAX_HEADERS_int,
+        size_t(0),
+    )
+    fmt.println("PARSE EXIT")
+    return err != -1
+}
+
+
+// test purposes
 PARSE :: proc(s: string, last_len: int, exp: int, comment: string) -> bool {
+    
     slen := size_of(s) -1
     method : cstring
     method_len : size_t
@@ -40,10 +80,6 @@ PARSE :: proc(s: string, last_len: int, exp: int, comment: string) -> bool {
     num_headers: size_t = 4
 
     cs := strings.clone_to_cstring(s, context.temp_allocator)
-
-    // mem.copy(raw_data(&buf), raw_data(&cs), slen)
-    // copy(buf, cs)
-    // num_headers := sizeof(headers)
 
     err := phr_parse_request(
         cs,
